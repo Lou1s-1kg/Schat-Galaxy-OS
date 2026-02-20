@@ -8,7 +8,7 @@ import {
   wrapPrivateKey, unwrapPrivateKey
 } from './utils/crypto';
 
-// === 全局样式 (新增 3-Pass 流程动画样式) ===
+// === 全局样式 (深度优化 3-Pass 流程动画) ===
 const globalStyles = `
   :root {
     --bg-color: #0b0c10; --text-color: #e0e0e0; --text-secondary: #a0a0a0;
@@ -95,23 +95,50 @@ const globalStyles = `
   .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: bold; letter-spacing: 1px; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-secondary); }
   .status-badge.active { border-color: var(--success); color: var(--success); background: rgba(46, 204, 113, 0.1); }
 
-  /* === 新增：3-Pass 流程动画样式 === */
-  .crypto-anim-overlay { position: absolute; inset: 0; background: rgba(18, 18, 18, 0.85); backdrop-filter: blur(8px); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
-  .crypto-stage { position: relative; width: 80%; height: 100px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px dashed rgba(255,255,255,0.2); }
-  .crypto-node { width: 60px; height: 60px; border-radius: 50%; background: var(--card-bg); border: 2px solid var(--text-secondary); display: flex; align-items: center; justify-content: center; font-weight: bold; z-index: 2; box-shadow: 0 0 15px rgba(0,0,0,0.5); }
+  /* === 新增：升级版 3-Pass 流程动画样式 === */
+  .crypto-anim-overlay { position: absolute; inset: 0; background: rgba(18, 18, 18, 0.9); backdrop-filter: blur(8px); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
+  .crypto-stage { position: relative; width: 80%; height: 120px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px dashed rgba(255,255,255,0.2); }
+  .crypto-node { width: 70px; height: 70px; border-radius: 50%; background: var(--card-bg); border: 2px solid var(--text-secondary); display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; z-index: 2; box-shadow: 0 0 15px rgba(0,0,0,0.5); font-size: 12px; }
   .crypto-node.me { border-color: var(--primary); box-shadow: 0 0 15px var(--primary-glow); }
-  .crypto-packet { position: absolute; top: 20px; background: #fff; color: #000; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: bold; display: flex; align-items: center; gap: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); z-index: 3; }
-  .crypto-lock { font-size: 14px; display: inline-block; }
-  .lock-me { filter: drop-shadow(0 0 2px var(--primary)); }
-  .lock-other { filter: drop-shadow(0 0 2px var(--danger)); }
-  .anim-text { font-size: 16px; font-weight: bold; letter-spacing: 1px; color: var(--primary); text-align: center; margin-top: 20px; animation: pulseText 1s infinite; }
+  .crypto-node.bob { border-color: #ffbe76; box-shadow: 0 0 15px rgba(255, 190, 118, 0.5); }
   
-  @keyframes flyToRight { 0% { left: 40px; transform: scale(1); } 50% { transform: scale(1.1); } 100% { left: calc(100% - 150px); transform: scale(1); } }
-  @keyframes flyToLeft { 0% { left: calc(100% - 150px); transform: scale(1); } 50% { transform: scale(1.1); } 100% { left: 40px; transform: scale(1); } }
-  @keyframes pulseText { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
+  /* 包裹整体 */
+  .crypto-packet { position: absolute; top: 15px; background: #2c3e50; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 3; transition: background 0.4s; border: 1px solid rgba(255,255,255,0.1); }
+  
+  /* 改进点 1：不同样式、不同形状的锁 */
+  .crypto-lock { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; font-size: 12px; font-weight: bold; position: relative; }
+  .my-lock { background: #00cec9; color: #000; border: 2px solid #00a8a8; border-radius: 4px; } /* 我的锁：方形青色 */
+  .his-lock { background: #ff4d4f; color: #fff; border: 2px solid #d9363e; border-radius: 20px; } /* 对方锁：圆角红色 */
 
-  .fly-right { animation: flyToRight 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
-  .fly-left { animation: flyToLeft 1.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+  /* 改进点 2：钥匙插入和开锁碎裂动画 */
+  .unlocking { animation: breakLock 0.8s forwards ease-in; }
+  @keyframes breakLock {
+    0% { transform: scale(1); opacity: 1; filter: brightness(1); }
+    50% { transform: scale(1.1); opacity: 1; filter: brightness(1.5); }
+    100% { transform: scale(1.5); opacity: 0; filter: blur(5px); }
+  }
+  .anim-key { position: absolute; top: -18px; right: -15px; font-size: 20px; animation: insertKey 0.8s forwards; opacity: 0; z-index: 10; filter: drop-shadow(0 0 5px rgba(255,255,255,0.8)); }
+  @keyframes insertKey {
+    0% { transform: translate(15px, -15px) rotate(45deg); opacity: 0; }
+    30% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+    70% { transform: translate(0, 0) rotate(-45deg); opacity: 1; }
+    100% { transform: translate(0, 0) rotate(-45deg); opacity: 0; }
+  }
+
+  /* 改进点 3：精确的定位与成功动画 (固定在对方那里) */
+  .pos-me { left: 80px; }
+  .pos-bob { left: calc(100% - 240px); }
+  .fly-right { animation: flyToRight 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+  .fly-left { animation: flyToLeft 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+  
+  @keyframes flyToRight { 0% { left: 80px; } 100% { left: calc(100% - 240px); } }
+  @keyframes flyToLeft { 0% { left: calc(100% - 240px); } 100% { left: 80px; } }
+
+  .pulse-success { background: #2ecc71 !important; color: white; border-color: #27ae60; animation: pulseWin 1s infinite; }
+  @keyframes pulseWin { 0%, 100% { box-shadow: 0 0 15px #2ecc71; } 50% { box-shadow: 0 0 30px #2ecc71; } }
+
+  .anim-text { font-size: 16px; font-weight: bold; letter-spacing: 1px; color: var(--primary); text-align: center; margin-top: 20px; animation: pulseText 1s infinite; height: 30px; }
+  @keyframes pulseText { 0%, 100% { opacity: 0.8; } 50% { opacity: 1; } }
 
   .chat-messages { flex: 1; padding: 20px; overflow-y: auto; background: var(--chat-bg); display: flex; flex-direction: column; gap: 15px; }
   .message-bubble { padding: 10px 15px; border-radius: 12px; max-width: 70%; position: relative; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
@@ -165,8 +192,9 @@ function App() {
   
   const [mode, setMode] = useState('STANDARD');
   
-  // === 新增：动画控制状态 ===
-  const [animState, setAnimState] = useState(null); // 'step1', 'step2', 'step3', 'success'
+  // === 动画状态管理 ===
+  // null -> step1 -> step2 -> step3_unlock -> step3_fly -> step4_unlock -> success -> null
+  const [animState, setAnimState] = useState(null); 
   
   const myKeys = useRef(null);
   const sharedSecret = useRef(null); 
@@ -181,7 +209,6 @@ function App() {
     left: Math.random() * 100 + '%', top: Math.random() * 100 + '%', delay: Math.random() * 3 + 's'
   })), []);
 
-  // 物理引擎
   useEffect(() => {
     if (step !== 'galaxy') return;
     const interval = setInterval(() => {
@@ -391,7 +418,7 @@ function App() {
     });
   };
 
-  // === 修改：在 Enhanced 模式下拦截发送，先播放动画 ===
+  // === 核心逻辑修改：精密的定时器控制多段动画 ===
   const sendMessage = async () => {
     if(!inputMsg) return;
     
@@ -399,29 +426,40 @@ function App() {
         if (!bioKeyRef.current) return alert("Upload Fingerprint First!");
         
         const tempMsg = inputMsg;
-        setInputMsg(''); // 先清空输入框
+        setInputMsg(''); 
         
-        // 播放动画序列
+        // 1. 飞向对方 (带本地锁)
         setAnimState('step1');
         setTimeout(() => {
+            // 2. 飞回自己 (双重锁)
             setAnimState('step2');
             setTimeout(() => {
-                setAnimState('step3');
+                // 3. 在本地解锁 (钥匙动画)
+                setAnimState('step3_unlock');
                 setTimeout(() => {
-                    setAnimState('success');
+                    // 4. 再次飞向对方 (只剩对方锁)
+                    setAnimState('step3_fly');
                     setTimeout(() => {
-                        setAnimState(null); // 关闭动画
-                        // 动画播放完毕后，正式执行底层加密和发送逻辑
-                        const taggedMsg = MAGIC_TAG + tempMsg;
-                        const cipher1 = commutativeCrypt(taggedMsg, bioKeyRef.current);
-                        socket.emit('send_message', { senderId: myId, receiverId: targetId, ciphertext: cipher1, type: '3pass-step1', isBiometric: true });
-                        
-                        const myMsg = { content: tempMsg, isSelf: true, locked: false, timestamp: new Date().toLocaleTimeString(), type: 'text', isBiometric: true, rawCipher: cipher1 };
-                        setMessageStore(prev => ({ ...prev, [targetId]: [...(prev[targetId] || []), myMsg] }));
-                    }, 1000);
-                }, 1500);
-            }, 1500);
-        }, 1500);
+                        // 5. 对方解锁 (停在对方位置 + 钥匙动画)
+                        setAnimState('step4_unlock');
+                        setTimeout(() => {
+                            // 6. 成功接收 (✅ 绿框固定在对方侧)
+                            setAnimState('success');
+                            setTimeout(() => {
+                                setAnimState(null); // 关闭动画面板
+                                // 实际的发送逻辑
+                                const taggedMsg = MAGIC_TAG + tempMsg;
+                                const cipher1 = commutativeCrypt(taggedMsg, bioKeyRef.current);
+                                socket.emit('send_message', { senderId: myId, receiverId: targetId, ciphertext: cipher1, type: '3pass-step1', isBiometric: true });
+                                
+                                const myMsg = { content: tempMsg, isSelf: true, locked: false, timestamp: new Date().toLocaleTimeString(), type: 'text', isBiometric: true, rawCipher: cipher1 };
+                                setMessageStore(prev => ({ ...prev, [targetId]: [...(prev[targetId] || []), myMsg] }));
+                            }, 1200);
+                        }, 1000); // 解锁动画耗时
+                    }, 1200); // 飞向对方耗时
+                }, 1000); // 解锁动画耗时
+            }, 1200); // 飞回本地耗时
+        }, 1200); // 飞向对方耗时
         return;
     }
 
@@ -445,7 +483,6 @@ function App() {
              if (!bioKeyRef.current) return alert("Upload Fingerprint First!");
              const tagged = MAGIC_TAG + base64;
              const cipher1 = commutativeCrypt(tagged, bioKeyRef.current);
-             
              socket.emit('send_message', { senderId: myId, receiverId: targetId, ciphertext: cipher1, type: '3pass-step1', isBiometric: true, isFileType: true, fileName: file.name, fileType: file.type });
              const myMsg = { content: base64, isSelf: true, locked: false, timestamp: new Date().toLocaleTimeString(), type: 'file', fileName: file.name, fileType: file.type, isBiometric: true };
              setMessageStore(prev => ({ ...prev, [targetId]: [...(prev[targetId] || []), myMsg] }));
@@ -500,13 +537,28 @@ function App() {
   let statusClass = "standard";
   if (mode === 'ENHANCED') { statusText = "🔒 ENHANCED (3-PASS)"; statusClass = "secure"; }
 
-  // 辅助渲染动画描述
+  // 动画状态对应 CSS 类
+  const getPacketClass = () => {
+    switch(animState) {
+      case 'step1': return 'fly-right';
+      case 'step2': return 'fly-left';
+      case 'step3_unlock': return 'pos-me';
+      case 'step3_fly': return 'fly-right';
+      case 'step4_unlock': return 'pos-bob';
+      case 'success': return 'pos-bob pulse-success';
+      default: return 'pos-me';
+    }
+  };
+
+  // 动画底部描述文字
   const renderAnimText = () => {
     switch(animState) {
-      case 'step1': return "Step 1: Encrypting with your local Bio-Key...";
-      case 'step2': return "Step 2: Friend adds their Bio-Key (Double Lock)...";
-      case 'step3': return "Step 3: Removing your Bio-Key...";
-      case 'success': return "Success: Magic Tag Verified!";
+      case 'step1': return "Step 1: Encrypting with your Square Bio-Key...";
+      case 'step2': return "Step 2: Friend adds their Round Bio-Key (Double Lock)...";
+      case 'step3_unlock': return "Unlocking: Removing your Bio-Key...";
+      case 'step3_fly': return "Step 3: Sending back with ONLY Friend's Lock...";
+      case 'step4_unlock': return "Unlocking: Friend removes their Bio-Key...";
+      case 'success': return "Success: Message received securely!";
       default: return "";
     }
   };
@@ -623,21 +675,38 @@ function App() {
                   </div>
                </div>
 
-               {/* === 新增：3-Pass 加密动画全屏遮罩层 === */}
+               {/* === 新增：升级版 3-Pass 加密动画遮罩层 === */}
                {animState && (
                  <div className="crypto-anim-overlay">
                    <h2 style={{color:'var(--primary)'}}>Shamir's Protocol Visualizer</h2>
                    <div className="crypto-stage">
-                     <div className="crypto-node me">Me</div>
+                     <div className="crypto-node me">Me<br/>(Local)</div>
                      
-                     {/* 飞行的消息包 */}
-                     <div className={`crypto-packet ${animState==='step1' ? 'fly-right' : animState==='step2' ? 'fly-left' : animState==='step3' ? 'fly-right' : ''}`}>
-                       📦 Data
-                       {(animState === 'step1' || animState === 'step2') && <span className="crypto-lock lock-me">🟢</span>}
-                       {(animState === 'step2' || animState === 'step3') && <span className="crypto-lock lock-other">🔴</span>}
+                     {/* 飞行的数据包与锁 */}
+                     <div className={`crypto-packet ${getPacketClass()}`}>
+                       {animState === 'success' ? '🔓 Data' : '📦 Data'}
+                       
+                       {/* 我的锁 (方形青色) */}
+                       {['step1', 'step2', 'step3_unlock'].includes(animState) && (
+                         <div className={`crypto-lock my-lock ${animState === 'step3_unlock' ? 'unlocking' : ''}`}>
+                           🔒 My Lock
+                           {animState === 'step3_unlock' && <span className="anim-key">🔑</span>}
+                         </div>
+                       )}
+
+                       {/* 对方的锁 (圆形红色) */}
+                       {['step2', 'step3_unlock', 'step3_fly', 'step4_unlock'].includes(animState) && (
+                         <div className={`crypto-lock his-lock ${animState === 'step4_unlock' ? 'unlocking' : ''}`}>
+                           🔒 Friend's Lock
+                           {animState === 'step4_unlock' && <span className="anim-key">🔑</span>}
+                         </div>
+                       )}
+                       
+                       {/* 成功状态显示在最右侧 */}
+                       {animState === 'success' && <span style={{marginLeft: 4}}>✅ Verified</span>}
                      </div>
                      
-                     <div className="crypto-node">Bob</div>
+                     <div className="crypto-node bob">{chatTitle}<br/>(Remote)</div>
                    </div>
                    <div className="anim-text">{renderAnimText()}</div>
                  </div>
