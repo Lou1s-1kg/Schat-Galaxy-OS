@@ -8,7 +8,7 @@ import {
   wrapPrivateKey, unwrapPrivateKey
 } from './utils/crypto';
 
-// === 全局样式 (深度优化排版与服务器区域) ===
+// === 全局样式 (修复重叠、拉伸与服务器区域) ===
 const globalStyles = `
   :root {
     --bg-color: #0b0c10; --text-color: #e0e0e0; --text-secondary: #a0a0a0;
@@ -95,20 +95,21 @@ const globalStyles = `
   .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: bold; letter-spacing: 1px; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-secondary); }
   .status-badge.active { border-color: var(--success); color: var(--success); background: rgba(46, 204, 113, 0.1); }
 
-  /* === 新增与修复：服务器区域与重叠问题解决 === */
+  /* === 新增与修复：服务器区域与动态定位重叠解决 === */
   .crypto-anim-overlay { position: absolute; inset: 0; background: rgba(18, 18, 18, 0.9); backdrop-filter: blur(8px); z-index: 1000; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; }
-  .crypto-stage { position: relative; width: 85%; height: 120px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px dashed rgba(255,255,255,0.2); }
   
-  /* 修复 1：节点文字完全居中 */
+  /* 舞台加宽到 90%，确保左右两端有充足空间停靠 */
+  .crypto-stage { position: relative; width: 90%; height: 120px; display: flex; align-items: center; justify-content: space-between; margin-bottom: 30px; border-bottom: 2px dashed rgba(255,255,255,0.2); }
+  
   .crypto-node { width: 70px; height: 70px; border-radius: 50%; background: var(--card-bg); border: 2px solid var(--text-secondary); display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: bold; z-index: 3; box-shadow: 0 0 15px rgba(0,0,0,0.5); font-size: 12px; text-align: center; line-height: 1.2; }
   .crypto-node.me { border-color: var(--primary); box-shadow: 0 0 15px var(--primary-glow); }
   .crypto-node.bob { border-color: #ffbe76; box-shadow: 0 0 15px rgba(255, 190, 118, 0.5); }
   
-  /* 修复 2：中间服务器高亮区，突出加密传输 */
-  .server-zone { position: absolute; left: 50%; transform: translateX(-50%); width: 45%; height: 100px; border-left: 2px dashed rgba(255, 77, 79, 0.4); border-right: 2px dashed rgba(255, 77, 79, 0.4); background: rgba(255, 77, 79, 0.05); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px; font-size: 11px; color: var(--danger); opacity: 0.8; border-radius: 8px; z-index: 1; letter-spacing: 1px; font-weight: bold; }
+  /* 修复 1：缩小服务器高亮区，防止包裹停靠时还处于红框内 */
+  .server-zone { position: absolute; left: 50%; transform: translateX(-50%); width: 220px; height: 100px; border-left: 2px dashed rgba(255, 77, 79, 0.5); border-right: 2px dashed rgba(255, 77, 79, 0.5); background: rgba(255, 77, 79, 0.05); display: flex; align-items: flex-end; justify-content: center; padding-bottom: 10px; font-size: 11px; color: var(--danger); opacity: 0.9; border-radius: 8px; z-index: 1; letter-spacing: 1px; font-weight: bold; }
 
-  /* 包裹整体：防止变形拉伸 */
-  .crypto-packet { position: absolute; top: 15px; background: #2c3e50; color: #fff; padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: bold; display: flex; align-items: center; gap: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 4; transition: background 0.4s; border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; width: max-content; }
+  /* 修复 2：优化包裹文字，禁止拉伸 */
+  .crypto-packet { position: absolute; top: 15px; background: #2c3e50; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); z-index: 4; transition: background 0.4s; border: 1px solid rgba(255,255,255,0.1); white-space: nowrap; width: max-content; }
   
   /* 强制 Data 文字不拉伸 */
   .data-label { flex-shrink: 0; display: inline-block; }
@@ -131,16 +132,23 @@ const globalStyles = `
     100% { transform: translate(0, 0) rotate(-45deg); opacity: 0; }
   }
 
-  /* 修复 3：彻底解决重叠！通过锚定 right 属性解决右侧越界 */
-  .pos-me { left: 85px; right: auto; transform: none; }
-  .pos-bob { left: auto !important; right: 85px; transform: none; } 
+  /* 修复 3：终极防重叠定位算法。
+     不论包裹多宽，pos-bob 永远让包裹的右边缘距离容器右侧 80px (正好贴在 Bob 节点旁边) */
+  .pos-me { left: 80px; transform: translateX(0); }
+  .pos-bob { left: 100%; transform: translateX(calc(-100% - 80px)); } 
   
   .fly-right { animation: flyToRight 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
   .fly-left { animation: flyToLeft 1.2s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
   
-  /* 飞行时预留足够空间 (340px) 避免覆盖目标 */
-  @keyframes flyToRight { 0% { left: 85px; right: auto; } 100% { left: calc(100% - 340px); right: auto; } }
-  @keyframes flyToLeft { 0% { left: calc(100% - 340px); right: auto; } 100% { left: 85px; right: auto; } }
+  /* 动态计算终点，彻底解决响应式重叠 */
+  @keyframes flyToRight { 
+    0% { left: 80px; transform: translateX(0); } 
+    100% { left: 100%; transform: translateX(calc(-100% - 80px)); } 
+  }
+  @keyframes flyToLeft { 
+    0% { left: 100%; transform: translateX(calc(-100% - 80px)); } 
+    100% { left: 80px; transform: translateX(0); } 
+  }
 
   .pulse-success { background: #2ecc71 !important; color: white; border-color: #27ae60; animation: pulseWin 1s infinite; }
   @keyframes pulseWin { 0%, 100% { box-shadow: 0 0 15px #2ecc71; } 50% { box-shadow: 0 0 30px #2ecc71; } }
