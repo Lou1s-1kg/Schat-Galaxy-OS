@@ -8,7 +8,7 @@ import {
   wrapPrivateKey, unwrapPrivateKey
 } from './utils/crypto';
 
-// === 全局样式 (v3.9.2 保持不变) ===
+// === 全局样式 (新增 crypto-terminal 可视化样式) ===
 const globalStyles = `
   :root {
     --bg-color: #0b0c10; --text-color: #e0e0e0; --text-secondary: #a0a0a0;
@@ -54,35 +54,17 @@ const globalStyles = `
   .star { position: absolute; background: #fff; border-radius: 50%; animation: twinkle 3s infinite; }
   @keyframes twinkle { 0%, 100% { opacity: 0.2; } 50% { opacity: 0.8; } }
 
-  /* 左侧列表样式 */
-  .sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0; width: 280px;
-    background: var(--sidebar-bg); backdrop-filter: blur(10px);
-    border-right: 1px solid var(--border-color); z-index: 100;
-    padding: 20px; display: flex; flex-direction: column; gap: 15px;
-  }
+  .sidebar { position: fixed; top: 0; left: 0; bottom: 0; width: 280px; background: var(--sidebar-bg); backdrop-filter: blur(10px); border-right: 1px solid var(--border-color); z-index: 100; padding: 20px; display: flex; flex-direction: column; gap: 15px; }
   .sidebar-header { font-size: 14px; font-weight: bold; color: var(--text-secondary); letter-spacing: 1px; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
-  
-  .friend-list-item { 
-    display: flex; align-items: center; gap: 10px; padding: 10px; 
-    border-radius: 8px; background: var(--input-bg); 
-    border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; 
-  }
+  .friend-list-item { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 8px; background: var(--input-bg); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; }
   .friend-list-item:hover { background: var(--card-bg); border-color: var(--primary); }
   .friend-list-item.active { border-color: var(--primary); background: rgba(0, 206, 201, 0.1); }
-  
   .friend-info { flex: 1; overflow: hidden; }
-  
   .orbit-checkbox { width: 16px; height: 16px; border-radius: 4px; border: 2px solid var(--text-secondary); display: flex; align-items: center; justify-content: center; transition: 0.2s; flex-shrink: 0; }
   .friend-list-item.active .orbit-checkbox { background: var(--primary); border-color: var(--primary); }
   .friend-list-item.active .orbit-checkbox::after { content: '✔'; font-size: 10px; color: #fff; }
-
   .sidebar-actions { display: flex; gap: 5px; margin-left: 5px; }
-  .mini-btn {
-    background: transparent; border: none; color: var(--text-secondary);
-    cursor: pointer; font-size: 12px; padding: 4px; border-radius: 4px;
-    opacity: 0.6; transition: 0.2s;
-  }
+  .mini-btn { background: transparent; border: none; color: var(--text-secondary); cursor: pointer; font-size: 12px; padding: 4px; border-radius: 4px; opacity: 0.6; transition: 0.2s; }
   .friend-list-item:hover .mini-btn { opacity: 1; } 
   .mini-btn:hover { background: var(--primary); color: #fff; }
   .mini-btn.danger:hover { background: var(--danger); color: #fff; }
@@ -112,6 +94,16 @@ const globalStyles = `
   @keyframes shine { 0% { left: -100%; } 20% { left: 200%; } 100% { left: 200%; } }
   .status-badge { padding: 4px 10px; border-radius: 4px; font-size: 10px; font-weight: bold; letter-spacing: 1px; background: var(--input-bg); border: 1px solid var(--border-color); color: var(--text-secondary); }
   .status-badge.active { border-color: var(--success); color: var(--success); background: rgba(46, 204, 113, 0.1); }
+
+  /* === 新增：加密过程监控终端样式 === */
+  .crypto-terminal {
+    background: #000; color: #00ff00; font-family: 'Courier New', monospace;
+    font-size: 11px; padding: 10px 15px; border-bottom: 1px solid var(--border-color);
+    display: flex; flex-direction: column; gap: 4px; box-shadow: inset 0 0 15px rgba(0,255,0,0.1);
+    max-height: 80px; overflow-y: auto; text-shadow: 0 0 2px rgba(0,255,0,0.5);
+  }
+  .crypto-log-entry { animation: typeIn 0.3s ease-out forwards; opacity: 0; transform: translateX(-10px); }
+  @keyframes typeIn { to { opacity: 1; transform: translateX(0); } }
 
   .chat-messages { flex: 1; padding: 20px; overflow-y: auto; background: var(--chat-bg); display: flex; flex-direction: column; gap: 15px; }
   .message-bubble { padding: 10px 15px; border-radius: 12px; max-width: 70%; position: relative; font-size: 14px; line-height: 1.5; word-wrap: break-word; }
@@ -165,6 +157,9 @@ function App() {
   
   const [mode, setMode] = useState('STANDARD');
   
+  // === 新增：用于存储加密日志的状态 ===
+  const [cryptoLogs, setCryptoLogs] = useState([]);
+  
   const myKeys = useRef(null);
   const sharedSecret = useRef(null); 
   const sharedSecrets = useRef({}); 
@@ -173,10 +168,21 @@ function App() {
   const fileInputRef = useRef(null);
   const bioInputRef = useRef(null);
   const chatEndRef = useRef(null);
+  const logsEndRef = useRef(null); // 控制台自动滚动
 
   const stars = useMemo(() => Array.from({ length: 100 }).map(() => ({
     left: Math.random() * 100 + '%', top: Math.random() * 100 + '%', delay: Math.random() * 3 + 's'
   })), []);
+
+  // 辅助函数：添加加密控制台日志 (保留最新 5 条)
+  const addCryptoLog = (msg) => {
+    const timestamp = new Date().toISOString().split('T')[1].substring(0, 12);
+    setCryptoLogs(prev => [...prev.slice(-4), `[${timestamp}] ${msg}`]);
+  };
+
+  useEffect(() => {
+    logsEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [cryptoLogs]);
 
   // 物理引擎
   useEffect(() => {
@@ -192,30 +198,18 @@ function App() {
     return () => clearInterval(interval);
   }, [step, selectedFriend]);
 
-  // === 修复的核心：勾选时重新分配轨道 ===
   const toggleFriendSelection = (id) => {
       setFriends(prev => {
-          // 1. 先计算目标状态
           const tempFriends = prev.map(f => f.id === id ? { ...f, selected: !f.selected } : f);
-          
-          // 2. 检查数量限制
           const activeCount = tempFriends.filter(f => f.selected).length;
-          if (activeCount > 4) { 
-              alert("ORBIT LIMIT REACHED: Max 4 favorites."); 
-              return prev; 
-          }
+          if (activeCount > 4) { alert("ORBIT LIMIT REACHED: Max 4 favorites."); return prev; }
 
-          // 3. 核心修复：重新计算所有被选中好友的轨道
-          // 这样每次勾选，所有人都会均匀分布，不会堆在一起
           let activeIndex = 0;
           return tempFriends.map(f => {
               if (f.selected) {
-                  // 均匀分布角度：360 / 总人数
                   const separation = 360 / activeCount;
-                  // 分层半径：避免看起来像一条线
                   const newRadius = 180 + (activeIndex * 50); 
                   const newAngle = activeIndex * separation;
-                  
                   activeIndex++;
                   return { ...f, angle: newAngle, radius: newRadius };
               }
@@ -243,13 +237,10 @@ function App() {
     const radiusStep = 60;
     const layer = index % 3; 
     return {
-      id, alias: id, 
-      color: colors[Math.floor(Math.random()*colors.length)],
-      angle: (index * 45) % 360, 
-      speed: 0.05 + Math.random() * 0.1, 
+      id, alias: id, color: colors[Math.floor(Math.random()*colors.length)],
+      angle: (index * 45) % 360, speed: 0.05 + Math.random() * 0.1, 
       radius: baseRadius + (layer * radiusStep) + (Math.random() * 20), 
-      unread: false, 
-      selected: index < 4 // 初始状态，前4个选中
+      unread: false, selected: index < 4 
     };
   };
 
@@ -288,6 +279,7 @@ function App() {
         setFriends(prev => prev.map(f => f.id === data.senderId ? { ...f, unread: true } : f));
       }
 
+      // === 修改：在 3-Pass 流程中增加控制台输出 ===
       if (data.type && data.type.startsWith('3pass-')) {
           if (!bioKeyRef.current) {
               const msg = { ...data, content: "🔒 [LOCKED BY FINGERPRINT]", locked: true, isBiometric: true };
@@ -296,12 +288,21 @@ function App() {
           }
           const currentCipher = data.ciphertext;
           const nextCipher = commutativeCrypt(currentCipher, bioKeyRef.current);
+          
           if (data.type === '3pass-step1') {
+              addCryptoLog(`[IN] Received Step 1 (Locked by ${data.senderId}).`);
+              addCryptoLog(`[OUT] Initiating Step 2: Applying local Bio-Key (Double Lock).`);
               socket.emit('send_message', { senderId: myId, receiverId: data.senderId, ciphertext: nextCipher, type: '3pass-step2', isBiometric: true });
           } else if (data.type === '3pass-step2') {
+              addCryptoLog(`[IN] Received Step 2 (Double Locked payload).`);
+              addCryptoLog(`[OUT] Initiating Step 3: Removing local Bio-Key A.`);
               socket.emit('send_message', { senderId: myId, receiverId: data.senderId, ciphertext: nextCipher, type: '3pass-step3', isBiometric: true });
           } else if (data.type === '3pass-step3') {
+              addCryptoLog(`[IN] Received Step 3. Decrypting with local Bio-Key B...`);
               const result = tryUnlockMessage(nextCipher, data);
+              if (result) addCryptoLog(`[SYS] Magic Tag Verified. Decryption Success.`);
+              else addCryptoLog(`[SYS] ERROR: Signature mismatch. Dropping payload.`);
+              
               const msg = { ...data, content: result ? result.content : "🔒 [FINGERPRINT MISMATCH]", locked: !result, timestamp: new Date().toLocaleTimeString(), type: result ? result.type : 'text', rawCipher: nextCipher };
               setMessageStore(prev => ({ ...prev, [data.senderId]: [...(prev[data.senderId] || []), msg] }));
           }
@@ -392,6 +393,7 @@ function App() {
   const handleReset = () => {
     setMode('STANDARD');
     bioKeyRef.current = null; 
+    setCryptoLogs([]); // 清空日志
     setMessageStore(prev => {
         const msgs = prev[targetId] || [];
         const relockedMsgs = msgs.map(m => {
@@ -405,10 +407,15 @@ function App() {
   const sendMessage = async () => {
     if(!inputMsg) return;
     
+    // === 修改：发送 Step 1 时触发控制台 ===
     if (mode === 'ENHANCED') {
         if (!bioKeyRef.current) return alert("Upload Fingerprint First!");
         const taggedMsg = MAGIC_TAG + inputMsg;
         const cipher1 = commutativeCrypt(taggedMsg, bioKeyRef.current);
+        
+        addCryptoLog(`[OUT] Initiating Shamir Protocol (Step 1).`);
+        addCryptoLog(`[SYS] Generating Stream Cipher XOR payload... Sent.`);
+        
         socket.emit('send_message', { senderId: myId, receiverId: targetId, ciphertext: cipher1, type: '3pass-step1', isBiometric: true });
         const myMsg = { content: inputMsg, isSelf: true, locked: false, timestamp: new Date().toLocaleTimeString(), type: 'text', isBiometric: true, rawCipher: cipher1 };
         setMessageStore(prev => ({ ...prev, [targetId]: [...(prev[targetId] || []), myMsg] }));
@@ -436,6 +443,10 @@ function App() {
              if (!bioKeyRef.current) return alert("Upload Fingerprint First!");
              const tagged = MAGIC_TAG + base64;
              const cipher1 = commutativeCrypt(tagged, bioKeyRef.current);
+             
+             addCryptoLog(`[FILE] Compressing into Base64...`);
+             addCryptoLog(`[OUT] Step 1: Encrypting file stream with Bio-Key.`);
+             
              socket.emit('send_message', { senderId: myId, receiverId: targetId, ciphertext: cipher1, type: '3pass-step1', isBiometric: true, isFileType: true, fileName: file.name, fileType: file.type });
              const myMsg = { content: base64, isSelf: true, locked: false, timestamp: new Date().toLocaleTimeString(), type: 'file', fileName: file.name, fileType: file.type, isBiometric: true };
              setMessageStore(prev => ({ ...prev, [targetId]: [...(prev[targetId] || []), myMsg] }));
@@ -457,6 +468,7 @@ function App() {
       const bioKey = await processFingerprint(file);
       bioKeyRef.current = bioKey; 
       setMode('ENHANCED'); 
+      setCryptoLogs(['[SYS] Biometric Key Injected. Encrypted Tunnel Established.']);
       setMessageStore(prev => {
           const msgs = prev[targetId] || [];
           const unlockedMsgs = msgs.map(m => {
@@ -601,6 +613,17 @@ function App() {
                      {mode === 'STANDARD' ? <button className="scanner-btn" onClick={()=>bioInputRef.current.click()}><div className="scan-line"></div>👆 ACTIVATE</button> : <button className="menu-btn danger" onClick={handleReset}>RESET / LOCK</button>}
                   </div>
                </div>
+               
+               {/* === 新增：当处于加密模式时显示日志面板 === */}
+               {mode === 'ENHANCED' && cryptoLogs.length > 0 && (
+                 <div className="crypto-terminal">
+                   {cryptoLogs.map((log, idx) => (
+                     <div key={idx} className="crypto-log-entry">{log}</div>
+                   ))}
+                   <div ref={logsEndRef} />
+                 </div>
+               )}
+
                <div className="chat-messages">
                   {(messageStore[targetId] || []).map((m, i) => (
                     <div key={i} className={`message-bubble ${m.type==='system'?'process':(m.isSelf?'self':'other')}`}>
